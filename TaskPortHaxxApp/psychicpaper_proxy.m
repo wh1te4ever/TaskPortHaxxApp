@@ -22,10 +22,11 @@
 #include "Header.h"
 
 extern void (*brX16Address)(void);
-extern char *_LIBC_CSTR *_LIBC_NULL_TERMINATED *_NSGetArgv(void);
+extern char ***_NSGetArgv(void);
 extern int posix_spawnattr_set_registered_ports_np(posix_spawnattr_t *__restrict attr, mach_port_t portarray[], uint32_t count);
 extern kern_return_t
 bootstrap_look_up(mach_port_t bp, const char *service_name, mach_port_t *sp);
+typedef void * xpc_object_t;
 extern xpc_object_t xpc_dictionary_create_reply(xpc_object_t request);
 extern void xpc_dictionary_set_int64(xpc_object_t xdict, const char *key, int64_t value);
 extern int xpc_pipe_routine_reply(xpc_object_t reply);

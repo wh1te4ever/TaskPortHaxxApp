@@ -1,4 +1,8 @@
-TARGET := iphone:clang:latest:15.0
+GO_EASY_ON_ME = 1
+DEBUG = 0
+FINALPACKAGE = 1
+
+TARGET := iphone:clang:16.5:14.5
 INSTALL_TARGET_PROCESSES = TaskPortHaxxApp
 ARCHS = arm64 arm64e
 PACKAGE_FORMAT = ipa
