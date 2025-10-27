@@ -13,16 +13,18 @@
 #include "mach_exc.h"
 #include "mach_excServer.h"
 
+uint64_t xpaci(uint64_t ptr)
+{
 #ifdef __arm64e__
-#   define xpaci(x) __asm__ volatile("xpaci %0" : "+r"(x))
-#else
-#   define xpaci(x) (void)(x)
+	asm("xpaci %[value]\n" : [value] "+r"(ptr));
 #endif
+    return ptr;
+}
 
 dispatch_semaphore_t sem_input_ready;
 dispatch_semaphore_t sem_output_ready;
 int num_exceptions_handled = 0;
-arm_thread_state64_t *new_state;
+_STRUCT_ARM_THREAD_STATE64 *new_state;
 kern_return_t catch_mach_exception_raise_state_identity (mach_port_t exception_port,
                                                          mach_port_t thread,
                                                          mach_port_t task,
@@ -43,53 +45,42 @@ kern_return_t catch_mach_exception_raise_state_identity (mach_port_t exception_p
     new_state = (arm_thread_state64_t*)new_state_;
     memcpy(new_state, old_state, sizeof(arm_thread_state64_t));
     *new_state_cnt = old_state_cnt;
+
+    static uint64_t pacFailedCount = 0;
+    if (exception == EXC_BAD_ACCESS && codeCnt == 2 && code[0] == 1 && (code[1] >> 36) == 0x2000000 && !pacFailedCount) {
+        pacFailedCount++;
+        printf("PAC failure detected! total count: %llu\n", pacFailedCount);
+        printf("thread: 0x%llx, task: 0x%llx\n", thread, task);
+
+        #ifdef __arm64e__
+        printf("pc: 0x%016llx\n", (uint64_t)new_state->__opaque_pc);
+        new_state->__opaque_pc = (void*)0x4141414141414141;
+        #else
+        printf("pc: 0x%016llx\n", (uint64_t)new_state->__pc);
+        new_state->__pc = 0x4141414141414141;
+        #endif
+
+        // kern_return_t err;
+        // err = thread_set_state(thread, ARM_THREAD_STATE64, (thread_state_t)new_state, ARM_THREAD_STATE64_COUNT);
+
+        // printf("thread_set_state err: %llu\n", err);
+
+        return KERN_SUCCESS;
+    }
     
-    // static uint64_t pacFailedCount = 0;
-    // if (exception == EXC_BAD_ACCESS && codeCnt == 2 && code[0] == 1 && (code[1] >> 36) == 0x2000000) {
-    //     // PAC issue
-    //     pacFailedCount++;
-    //     // if ((pacFailedCount % 92792) == 0) {
-    //     //     printf("PAC failure detected! total count: %llu\n", pacFailedCount);
-    //     //     printf("current_pc: 0x%016llx\n", old_state->__x[31]);
-    //     //     printf("0x%016llx\n", ((uint64_t)brX16Address & 0xFFFFFFFFF) | (pacFailedCount << 40));
-    //     // }
+#if 0
+    static uint64_t pacFailedCount = 0;
+    if (exception == EXC_BAD_ACCESS && codeCnt == 2 && code[0] == 1 && (code[1] >> 36) == 0x2000000) {
+        // PAC issue
+        pacFailedCount++;
+        // if ((pacFailedCount % 92792) == 0) {
+        //     printf("PAC failure detected! total count: %llu\n", pacFailedCount);
+        //     printf("current_pc: 0x%016llx\n", old_state->__x[31]);
+        //     printf("0x%016llx\n", ((uint64_t)brX16Address & 0xFFFFFFFFF) | (pacFailedCount << 40));
+        // }
 
-    //     printf("PAC failure detected! total count: %llu\n", pacFailedCount);
-    //     printf("Registers:\n"
-    //                " x0: 0x%016llx  x1: 0x%016llx  x2: 0x%016llx  x3: 0x%016llx\n"
-    //                " x4: 0x%016llx  x5: 0x%016llx  x6: 0x%016llx  x7: 0x%016llx\n"
-    //                " x8: 0x%016llx  x9: 0x%016llx x10: 0x%016llx x11: 0x%016llx\n"
-    //                "x12: 0x%016llx x13: 0x%016llx x14: 0x%016llx x15: 0x%016llx\n"
-    //                "x16: 0x%016llx x17: 0x%016llx x18: 0x%016llx x19: 0x%016llx\n"
-    //                "x20: 0x%016llx x21: 0x%016llx x22: 0x%016llx x23: 0x%016llx\n"
-    //                "x24: 0x%016llx x25: 0x%016llx x26: 0x%016llx x27: 0x%016llx\n"
-    //                "x28: 0x%016llx  fp: 0x%016llx  lr: 0x%016llx\n"
-    //                " pc: 0x%016llx  sp: 0x%016llx psr: 0x%08x"
-    //                "\n",
-    //                old_state->__x[ 0], old_state->__x[ 1], old_state->__x[ 2], old_state->__x[ 3], old_state->__x[ 4], old_state->__x[ 5], old_state->__x[ 6], old_state->__x[ 7], old_state->__x[ 8], old_state->__x[ 9],
-    //                old_state->__x[10], old_state->__x[11], old_state->__x[12], old_state->__x[13], old_state->__x[14], old_state->__x[15], old_state->__x[16], old_state->__x[17], old_state->__x[18], old_state->__x[19],
-    //                old_state->__x[20], old_state->__x[21], old_state->__x[22], old_state->__x[23], old_state->__x[24], old_state->__x[25], old_state->__x[26], old_state->__x[27], old_state->__x[28],
-    //                old_state->__x[29], old_state->__x[30], old_state->__x[31], old_state->__x[32], old_state->__cpsr);
-        
-    //     // uint64_t tmp = ((uint64_t)brX16Address & 0xFFFFFFFFF) | (pacFailedCount << 40);
-    //     // new_state->__x[31] = tmp;
-
-    //     new_state->__x[31] = 0x4141414141414141;
-
-    //     return KERN_SUCCESS;
-    // }
-    
-    printf("exception handler raise state - exception %d\n", exception);
-    if (num_exceptions_handled == 0) {
-        printf("got task port: %d\n", task);
-        GlobalChildTaskPort = task;
-        GlobalChildThreadPort = thread;
-    } else {
-        dispatch_semaphore_signal(sem_output_ready);
-        if ((old_state->__x[30] & 0xFFFFFF00) != 0x41414100 || wantsDetach) {
-            wantsDetach = NO;
-            printf("Process might have crashed! unexpected lr value: 0x%llx\n", old_state->__x[30]);
-            printf("Registers:\n"
+        printf("PAC failure detected! total count: %llu\n", pacFailedCount);
+        printf("Registers:\n"
                    " x0: 0x%016llx  x1: 0x%016llx  x2: 0x%016llx  x3: 0x%016llx\n"
                    " x4: 0x%016llx  x5: 0x%016llx  x6: 0x%016llx  x7: 0x%016llx\n"
                    " x8: 0x%016llx  x9: 0x%016llx x10: 0x%016llx x11: 0x%016llx\n"
@@ -104,8 +95,68 @@ kern_return_t catch_mach_exception_raise_state_identity (mach_port_t exception_p
                    old_state->__x[10], old_state->__x[11], old_state->__x[12], old_state->__x[13], old_state->__x[14], old_state->__x[15], old_state->__x[16], old_state->__x[17], old_state->__x[18], old_state->__x[19],
                    old_state->__x[20], old_state->__x[21], old_state->__x[22], old_state->__x[23], old_state->__x[24], old_state->__x[25], old_state->__x[26], old_state->__x[27], old_state->__x[28],
                    old_state->__x[29], old_state->__x[30], old_state->__x[31], old_state->__x[32], old_state->__cpsr);
+        
+        // uint64_t tmp = ((uint64_t)brX16Address & 0xFFFFFFFFF) | (pacFailedCount << 40);
+        // new_state->__x[31] = tmp;
+
+        new_state->__x[31] = 0x4141414141414141;
+
+        return KERN_SUCCESS;
+    }
+#endif
+    
+    printf("exception handler raise state - exception %d\n", exception);
+    if (num_exceptions_handled == 0) {
+        printf("got task port: %d\n", task);
+        GlobalChildTaskPort = task;
+        GlobalChildThreadPort = thread;
+    } else {
+        dispatch_semaphore_signal(sem_output_ready);
+        #ifdef __arm64e__
+        if ((xpaci((uint64_t)(old_state->__opaque_lr)) & 0xFFFFFF00) != 0x41414100 || wantsDetach) {
+            wantsDetach = NO;
+
+            printf("Process might have crashed! unexpected lr value: 0x%llx\n", old_state->__opaque_lr);
+            printf("Registers:\n"
+                   " x0: 0x%016llx  x1: 0x%016llx  x2: 0x%016llx  x3: 0x%016llx\n"
+                   " x4: 0x%016llx  x5: 0x%016llx  x6: 0x%016llx  x7: 0x%016llx\n"
+                   " x8: 0x%016llx  x9: 0x%016llx x10: 0x%016llx x11: 0x%016llx\n"
+                   "x12: 0x%016llx x13: 0x%016llx x14: 0x%016llx x15: 0x%016llx\n"
+                   "x16: 0x%016llx x17: 0x%016llx x18: 0x%016llx x19: 0x%016llx\n"
+                   "x20: 0x%016llx x21: 0x%016llx x22: 0x%016llx x23: 0x%016llx\n"
+                   "x24: 0x%016llx x25: 0x%016llx x26: 0x%016llx x27: 0x%016llx\n"
+                   "x28: 0x%016llx  fp: 0x%016llx  lr: 0x%016llx\n"
+                   " pc: 0x%016llx  sp: 0x%016llx psr: 0x%08x"
+                   "\n",
+                   old_state->__x[ 0], old_state->__x[ 1], old_state->__x[ 2], old_state->__x[ 3], old_state->__x[ 4], old_state->__x[ 5], old_state->__x[ 6], old_state->__x[ 7], old_state->__x[ 8], old_state->__x[ 9],
+                   old_state->__x[10], old_state->__x[11], old_state->__x[12], old_state->__x[13], old_state->__x[14], old_state->__x[15], old_state->__x[16], old_state->__x[17], old_state->__x[18], old_state->__x[19],
+                   old_state->__x[20], old_state->__x[21], old_state->__x[22], old_state->__x[23], old_state->__x[24], old_state->__x[25], old_state->__x[26], old_state->__x[27], old_state->__x[28],
+                   old_state->__opaque_fp, old_state->__opaque_lr, old_state->__opaque_pc, old_state->__opaque_sp, old_state->__cpsr);
             return KERN_FAILURE;
         }
+        #else
+        if ((old_state->__lr & 0xFFFFFF00) != 0x41414100 || wantsDetach) {
+            wantsDetach = NO;
+
+            printf("Process might have crashed! unexpected lr value: 0x%llx\n", old_state->__lr);
+            printf("Registers:\n"
+                   " x0: 0x%016llx  x1: 0x%016llx  x2: 0x%016llx  x3: 0x%016llx\n"
+                   " x4: 0x%016llx  x5: 0x%016llx  x6: 0x%016llx  x7: 0x%016llx\n"
+                   " x8: 0x%016llx  x9: 0x%016llx x10: 0x%016llx x11: 0x%016llx\n"
+                   "x12: 0x%016llx x13: 0x%016llx x14: 0x%016llx x15: 0x%016llx\n"
+                   "x16: 0x%016llx x17: 0x%016llx x18: 0x%016llx x19: 0x%016llx\n"
+                   "x20: 0x%016llx x21: 0x%016llx x22: 0x%016llx x23: 0x%016llx\n"
+                   "x24: 0x%016llx x25: 0x%016llx x26: 0x%016llx x27: 0x%016llx\n"
+                   "x28: 0x%016llx  fp: 0x%016llx  lr: 0x%016llx\n"
+                   " pc: 0x%016llx  sp: 0x%016llx psr: 0x%08x"
+                   "\n",
+                   old_state->__x[ 0], old_state->__x[ 1], old_state->__x[ 2], old_state->__x[ 3], old_state->__x[ 4], old_state->__x[ 5], old_state->__x[ 6], old_state->__x[ 7], old_state->__x[ 8], old_state->__x[ 9],
+                   old_state->__x[10], old_state->__x[11], old_state->__x[12], old_state->__x[13], old_state->__x[14], old_state->__x[15], old_state->__x[16], old_state->__x[17], old_state->__x[18], old_state->__x[19],
+                   old_state->__x[20], old_state->__x[21], old_state->__x[22], old_state->__x[23], old_state->__x[24], old_state->__x[25], old_state->__x[26], old_state->__x[27], old_state->__x[28],
+                   old_state->__fp, old_state->__lr, old_state->__pc, old_state->__sp, old_state->__cpsr);
+            return KERN_FAILURE;
+        }
+        #endif
     }
     
     __darwin_arm_thread_state64_set_pc_fptr(*new_state, ptrauth_sign_unauthenticated(ptrauth_strip((void *)brX16Address, ptrauth_key_function_pointer), ptrauth_key_function_pointer, 0));
@@ -207,7 +258,7 @@ os_unfair_lock funcLock = OS_UNFAIR_LOCK_INIT;
 uint64_t RemoteArbCallInternal(uint64_t pc, uint64_t args[], int argCount) {
     assert(argCount <= 8);
     
-    xpaci(pc);
+    pc = xpaci(pc);
     new_state->__x[16] = pc;
     memcpy(&new_state->__x[0], args, argCount * sizeof(uint64_t));
     dispatch_semaphore_signal(sem_input_ready);
