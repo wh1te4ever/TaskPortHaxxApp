@@ -44,20 +44,40 @@ kern_return_t catch_mach_exception_raise_state_identity (mach_port_t exception_p
     memcpy(new_state, old_state, sizeof(arm_thread_state64_t));
     *new_state_cnt = old_state_cnt;
     
-    static uint64_t pacFailedCount = 0;
-    if (exception == EXC_BAD_ACCESS && codeCnt == 2 && code[0] == 1 && (code[1] >> 36) == 0x2000000) {
-        // PAC issue
-        pacFailedCount++;
-        if ((pacFailedCount % 92792) == 0) {
-            printf("PAC failure detected! total count: %llu\n", pacFailedCount);
-            printf("current_pc: 0x%016llx\n", old_state->__x[31]);
-            printf("0x%016llx\n", ((uint64_t)brX16Address & 0xFFFFFFFFF) | (pacFailedCount << 40));
-        }
+    // static uint64_t pacFailedCount = 0;
+    // if (exception == EXC_BAD_ACCESS && codeCnt == 2 && code[0] == 1 && (code[1] >> 36) == 0x2000000) {
+    //     // PAC issue
+    //     pacFailedCount++;
+    //     // if ((pacFailedCount % 92792) == 0) {
+    //     //     printf("PAC failure detected! total count: %llu\n", pacFailedCount);
+    //     //     printf("current_pc: 0x%016llx\n", old_state->__x[31]);
+    //     //     printf("0x%016llx\n", ((uint64_t)brX16Address & 0xFFFFFFFFF) | (pacFailedCount << 40));
+    //     // }
+
+    //     printf("PAC failure detected! total count: %llu\n", pacFailedCount);
+    //     printf("Registers:\n"
+    //                " x0: 0x%016llx  x1: 0x%016llx  x2: 0x%016llx  x3: 0x%016llx\n"
+    //                " x4: 0x%016llx  x5: 0x%016llx  x6: 0x%016llx  x7: 0x%016llx\n"
+    //                " x8: 0x%016llx  x9: 0x%016llx x10: 0x%016llx x11: 0x%016llx\n"
+    //                "x12: 0x%016llx x13: 0x%016llx x14: 0x%016llx x15: 0x%016llx\n"
+    //                "x16: 0x%016llx x17: 0x%016llx x18: 0x%016llx x19: 0x%016llx\n"
+    //                "x20: 0x%016llx x21: 0x%016llx x22: 0x%016llx x23: 0x%016llx\n"
+    //                "x24: 0x%016llx x25: 0x%016llx x26: 0x%016llx x27: 0x%016llx\n"
+    //                "x28: 0x%016llx  fp: 0x%016llx  lr: 0x%016llx\n"
+    //                " pc: 0x%016llx  sp: 0x%016llx psr: 0x%08x"
+    //                "\n",
+    //                old_state->__x[ 0], old_state->__x[ 1], old_state->__x[ 2], old_state->__x[ 3], old_state->__x[ 4], old_state->__x[ 5], old_state->__x[ 6], old_state->__x[ 7], old_state->__x[ 8], old_state->__x[ 9],
+    //                old_state->__x[10], old_state->__x[11], old_state->__x[12], old_state->__x[13], old_state->__x[14], old_state->__x[15], old_state->__x[16], old_state->__x[17], old_state->__x[18], old_state->__x[19],
+    //                old_state->__x[20], old_state->__x[21], old_state->__x[22], old_state->__x[23], old_state->__x[24], old_state->__x[25], old_state->__x[26], old_state->__x[27], old_state->__x[28],
+    //                old_state->__x[29], old_state->__x[30], old_state->__x[31], old_state->__x[32], old_state->__cpsr);
         
-        uint64_t tmp = ((uint64_t)brX16Address & 0xFFFFFFFFF) | (pacFailedCount << 40);
-        new_state->__x[31] = tmp;
-        return KERN_SUCCESS;
-    }
+    //     // uint64_t tmp = ((uint64_t)brX16Address & 0xFFFFFFFFF) | (pacFailedCount << 40);
+    //     // new_state->__x[31] = tmp;
+
+    //     new_state->__x[31] = 0x4141414141414141;
+
+    //     return KERN_SUCCESS;
+    // }
     
     printf("exception handler raise state - exception %d\n", exception);
     if (num_exceptions_handled == 0) {
