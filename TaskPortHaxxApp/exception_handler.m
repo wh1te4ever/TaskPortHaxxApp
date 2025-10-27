@@ -140,7 +140,7 @@ mach_port_t setup_exception_server(void) {
     printf("Signed:   0x%16llx\n", (uint64_t)brX16Address);
     brX16Address = (void *)func;
     printf("Signed2:  0x%16llx\n", (uint64_t)brX16Address);
-    brX16Address = (void *)0xb62cd70206b89848;
+    // brX16Address = (void *)0xb62cd70206b89848;
     
     mach_port_t server_port;
     kern_return_t kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &server_port);
