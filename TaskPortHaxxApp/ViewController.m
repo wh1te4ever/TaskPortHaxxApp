@@ -80,7 +80,10 @@
 - (void)arbCallButtonTapped {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         //xpc_object_t bootstrap_pipe = ((struct xpc_global_data *)_os_alloc_once_table[OS_ALLOC_ONCE_KEY_LIBXPC].ptr)->xpc_bootstrap_pipe;
+
+        // vm_address_t map = RemoteArbCall(mmap, 0, 0x4000, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
         
+#if 1
         vm_address_t map = RemoteArbCall(mmap, 0, 0x4000, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
         printf("Mapped memory at 0x%llx\n", map);
         RemoteWriteString(map, "/tmp/.it_works");
@@ -102,6 +105,7 @@
 //        _tmp_ptr = (uint64_t)map;
 //        RemoteArbCall(((uint64_t (*)(void))map));
         RemoteArbCall(munmap, map, 0x4000);
+#endif
     });
 }
 

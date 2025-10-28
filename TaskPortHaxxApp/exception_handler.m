@@ -52,13 +52,13 @@ kern_return_t catch_mach_exception_raise_state_identity (mach_port_t exception_p
         printf("PAC failure detected! total count: %llu\n", pacFailedCount);
         printf("thread: 0x%llx, task: 0x%llx\n", thread, task);
 
-        #ifdef __arm64e__
-        printf("pc: 0x%016llx\n", (uint64_t)new_state->__opaque_pc);
+#ifdef __arm64e__
+        printf("pc: 0x%016llx (0x%016llx)\n", (uint64_t)new_state->__opaque_pc, xpaci((uint64_t)new_state->__opaque_pc));
         new_state->__opaque_pc = (void*)0x4141414141414141;
-        #else
+#else
         printf("pc: 0x%016llx\n", (uint64_t)new_state->__pc);
         new_state->__pc = 0x4141414141414141;
-        #endif
+#endif
 
         // kern_return_t err;
         // err = thread_set_state(thread, ARM_THREAD_STATE64, (thread_state_t)new_state, ARM_THREAD_STATE64_COUNT);
@@ -67,6 +67,16 @@ kern_return_t catch_mach_exception_raise_state_identity (mach_port_t exception_p
 
         return KERN_SUCCESS;
     }
+
+    // static int runOnlyOnce = 0;
+    // if (exception == EXC_BREAKPOINT && runOnlyOnce == 0) {
+    //     printf("new_state->__opaque_pc 0x%llx\n, ", new_state->__opaque_pc);
+    //     runOnlyOnce++;
+
+    //     new_state->__opaque_pc = (void*)0x4141414141414141;
+
+    //     return KERN_SUCCESS;
+    // }
     
 #if 0
     static uint64_t pacFailedCount = 0;
@@ -112,7 +122,7 @@ kern_return_t catch_mach_exception_raise_state_identity (mach_port_t exception_p
         GlobalChildThreadPort = thread;
     } else {
         dispatch_semaphore_signal(sem_output_ready);
-        #ifdef __arm64e__
+#ifdef __arm64e__
         if ((xpaci((uint64_t)(old_state->__opaque_lr)) & 0xFFFFFF00) != 0x41414100 || wantsDetach) {
             wantsDetach = NO;
 
@@ -134,7 +144,7 @@ kern_return_t catch_mach_exception_raise_state_identity (mach_port_t exception_p
                    old_state->__opaque_fp, old_state->__opaque_lr, old_state->__opaque_pc, xpaci((uint64_t)old_state->__opaque_pc), old_state->__opaque_sp, old_state->__cpsr);
             return KERN_FAILURE;
         }
-        #else
+#else
         if ((old_state->__lr & 0xFFFFFF00) != 0x41414100 || wantsDetach) {
             wantsDetach = NO;
 
@@ -156,7 +166,7 @@ kern_return_t catch_mach_exception_raise_state_identity (mach_port_t exception_p
                    old_state->__fp, old_state->__lr, old_state->__pc, old_state->__sp, old_state->__cpsr);
             return KERN_FAILURE;
         }
-        #endif
+#endif
     }
 
     //__darwin_arm_thread_state64_set_lr_fptr(*new_state, ptrauth_sign_unauthenticated(ptrauth_strip((void *)0x41414100, ptrauth_key_function_pointer), ptrauth_key_function_pointer, 0));
@@ -204,14 +214,17 @@ mach_port_t setup_exception_server(void) {
     uint32_t *func = ((uint32_t *)ptrauth_strip((void *)fcntl, ptrauth_key_function_pointer));
     for (; *func != 0xd61f0200;/* br x16 opcode */ func++) {}
     func--;func--; //XXX TEMPORARY; -8 off
-    brX16Address = (void *)func;
+    // brX16Address = func;//(void *)0x41424344;
+    brX16Address = (void *)ptrauth_sign_unauthenticated((void *)(func), ptrauth_key_function_pointer, 0);
     
     printf("INFO of br x16 address:\n");
     printf("Unsigned: 0x%16llx\n", (uint64_t)func);
-    // printf("Signed:   0x%16llx\n", (uint64_t)brX16Address);
+    printf("Signed:   0x%16llx\n", (uint64_t)brX16Address);
 
     // brX16Address will be first executed from xpcproxy
     // and then x16 will be pointed to arbitrary call, but x16 has some PAC issues maybe?
+    brX16Address = (void *)func;
+    printf("Signed2:  0x%16llx\n", (uint64_t)brX16Address);
     
     mach_port_t server_port;
     kern_return_t kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &server_port);
