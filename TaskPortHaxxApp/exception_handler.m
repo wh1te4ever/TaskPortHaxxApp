@@ -318,3 +318,61 @@ void RemoteDetach(void) {
     mach_port_t task = (mach_port_t)RemoteArbCall(task_self_trap);
     RemoteArbCall(task_set_exception_ports, task, 2, 0, 1, 0);
 }
+
+kern_return_t
+RemoteTaskRead64(uint64_t addr, mach_port_t task, uint64_t map) {
+    kern_return_t kr = (kern_return_t)RemoteArbCall(vm_read_overwrite, task, addr, sizeof(uint64_t), map, map + 8);
+    if (kr != KERN_SUCCESS) {
+        printf("RemoteTaskRead64 failed\n");
+        return kr;
+    }
+    return kr;
+}
+
+void RemoteTaskHexDump(uint64_t addr, size_t size, mach_port_t task, uint64_t map) {
+    void *data = malloc(size);
+    if (!data) return;
+
+    size_t off = 0;
+    while (off < size) {
+        RemoteTaskRead64(addr + off, task, map);
+        uint64_t v = RemoteRead64(map);
+
+        size_t to_copy = (size - off) < 8 ? (size - off) : 8;
+        memcpy((unsigned char*)data + off, &v, to_copy);
+        off += to_copy;
+    }
+
+    char ascii[17];
+    size_t i, j;
+    ascii[16] = '\0';
+    for (i = 0; i < size; ++i) {
+        if ((i % 16) == 0)
+        {
+            printf("[0x%016llx+0x%03zx] ", addr, i);
+        }
+
+        printf("%02X ", ((unsigned char*)data)[i]);
+        if (((unsigned char*)data)[i] >= ' ' && ((unsigned char*)data)[i] <= '~') {
+            ascii[i % 16] = ((unsigned char*)data)[i];
+        } else {
+            ascii[i % 16] = '.';
+        }
+        if ((i+1) % 8 == 0 || i+1 == size) {
+            printf(" ");
+            if ((i+1) % 16 == 0) {
+                printf("|  %s \n", ascii);
+            } else if (i+1 == size) {
+                ascii[(i+1) % 16] = '\0';
+                if ((i+1) % 16 <= 8) {
+                    printf(" ");
+                }
+                for (j = (i+1) % 16; j < 16; ++j) {
+                    printf("   ");
+                }
+                printf("|  %s \n", ascii);
+            }
+        }
+    }
+    free(data);
+}

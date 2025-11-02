@@ -35,6 +35,7 @@ void RemoteWrite64(uint64_t address, uint64_t value);
 void RemoteWriteMemory(uint64_t address, const void *data, size_t length);
 void RemoteWriteString(uint64_t address, const char *string);
 void RemoteDetach(void);
+void RemoteTaskHexDump(uint64_t addr, size_t size, mach_port_t task, uint64_t map);
 
 #define PT_DETACH 11
 #define PT_ATTACHEXC 14

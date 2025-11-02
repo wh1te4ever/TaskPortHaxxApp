@@ -1,3 +1,5 @@
+GO_EASY_ON_ME=1
+
 TARGET := iphone:clang:latest:15.0
 INSTALL_TARGET_PROCESSES = TaskPortHaxxApp
 ARCHS = arm64
@@ -19,7 +21,7 @@ TaskPortHaxxApp_FILES = \
 	TaskPortHaxxApp/mach_excServer.c \
 	TaskPortHaxxApp/NSUserDefaults+Pref.m
 TaskPortHaxxApp_FRAMEWORKS = UIKit CoreGraphics CoreServices
-TaskPortHaxxApp_CFLAGS = -fobjc-arc
+TaskPortHaxxApp_CFLAGS = -fobjc-arc -Wno-error=deprecated-declarations
 TaskPortHaxxApp_CODESIGN_FLAGS = -S./TaskPortHaxxApp/TaskPortHaxxApp.ent
 
 include $(THEOS_MAKE_PATH)/application.mk
