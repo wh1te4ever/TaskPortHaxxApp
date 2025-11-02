@@ -258,6 +258,8 @@ vm_offset_t findSbinLaunchdOff(void) {
 
         RemoteTaskHexDump(launchd_base + launchd_str_off, 0x100, launchd_task, (uint64_t)map);
 
+        RemoteTaskHexDump(launchd_base, 0x1000, launchd_task, (uint64_t)map);
+
         RemoteArbCall(exit, 0);
         
         // stuff
