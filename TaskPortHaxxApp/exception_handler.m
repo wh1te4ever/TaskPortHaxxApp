@@ -14,6 +14,8 @@
 #include "mach_exc.h"
 #include "mach_excServer.h"
 
+extern bool gIsPACSupported;
+
 struct dyld_all_image_infos *_alt_dyld_get_all_image_infos(void) {
     static struct dyld_all_image_infos *result;
     if (result) {
@@ -201,15 +203,21 @@ mach_port_t setup_exception_server(void) {
         NSUserDefaults.standardUserDefaults.signedDiversifier = 0;
     }
     
-    // PAC signing gadget
-    func = (uint32_t *)zeroify_scalable_zone;
-    for (; func[0] != 0xdac10230 || func[1] != 0xf9000110; func++) {}
-    paciaAddress = (uint64_t)func;
-    printf("Found pacia x16, x17 at address: 0x%016lx\n", paciaAddress);
+    if(gIsPACSupported) {
+        // PAC signing gadget
+        func = (uint32_t *)zeroify_scalable_zone;
+        for (; func[0] != 0xdac10230 || func[1] != 0xf9000110; func++) {}
+        paciaAddress = (uint64_t)func;
+        printf("Found pacia x16, x17 at address: 0x%016lx\n", paciaAddress);
+    }
     
     // change LR gadget
     func = (uint32_t *)dispatch_debug;
-    for (; func[0] != 0xaa0103fe || func[1] != 0xf9402008; func++) {}
+    if(gIsPACSupported) {
+        for (; func[0] != 0xaa0103fe /* mov x30, x1 */ || func[1] != 0xf9402008; /* ldr x8, [x0,#0x40] */ func++) {}
+    } else {
+        for (; func[0] != 0xaa0103fe /* mov x30, x1 */ || func[1] != 0xf9402008; /* ldr x8, [x0,#0x40] */ func--) {}
+    } 
     changeLRAddress = (uint64_t)func;
     
     // blraaz gadget

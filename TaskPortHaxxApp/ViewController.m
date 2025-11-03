@@ -12,6 +12,16 @@
 #include "Header.h"
 #include <sys/wait.h>
 
+bool gIsPACSupported = false;
+
+bool IsPACSupported(void) {
+    cpu_subtype_t cpusubtype = 0;
+    size_t sz = sizeof(cpusubtype);
+    if (sysctlbyname("hw.cpusubtype", &cpusubtype, &sz, NULL, 0) != 0) return false;
+    if (cpusubtype == CPU_SUBTYPE_ARM64E) return true;
+    return false;
+}
+
 vm_offset_t findSbinLaunchdOff(void) {
     char *path = "/sbin/launchd";
     int fd = open(path, O_RDONLY);
@@ -42,6 +52,8 @@ vm_offset_t findSbinLaunchdOff(void) {
 @implementation ViewController
 
 - (void)viewDidLoad {
+    gIsPACSupported = IsPACSupported();
+
     [super viewDidLoad];
     self.navigationItem.title = @"Task Port Haxx";
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Options" menu:[UIMenu menuWithTitle:@"Options" children:@[
@@ -216,7 +228,7 @@ vm_offset_t findSbinLaunchdOff(void) {
         }
         remote_dyld_all_image_infos_addr = (void *)(RemoteRead64(map + 8) + offsetof(struct task_dyld_info, all_image_info_addr));
         printf("launchd dyld_all_image_infos_addr: %p\n", remote_dyld_all_image_infos_addr);
-        
+
         // uint32_t infoArrayCount = &remote_dyld_all_image_infos_addr->infoArrayCount;
         kr = (kern_return_t)RemoteArbCall(vm_read_overwrite, launchd_task, (mach_vm_address_t)&remote_dyld_all_image_infos_addr->infoArrayCount, sizeof(uint32_t), map, map + 8);
         if (kr != KERN_SUCCESS) {

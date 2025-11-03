@@ -1,3 +1,5 @@
+GO_EASY_ON_ME = 1
+
 TARGET := iphone:clang:latest:15.0
 INSTALL_TARGET_PROCESSES = TaskPortHaxxApp
 ARCHS = arm64
