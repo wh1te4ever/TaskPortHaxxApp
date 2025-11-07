@@ -81,10 +81,45 @@ kern_return_t catch_mach_exception_raise_state_identity (mach_port_t exception_p
     static uint64_t pacFailedCount = 0;
     static uint64_t pacBruteForcedPtr = 0;
     static uint32_t lastDiversifier = 0;
+    // DumpRegisters(old_state);
+    NSLog(@"[w4ever] new_state->__flags before clearing: 0x%08x, pc = 0x%llx", new_state->__flags, old_state->__pc);
+    // new_state->__flags &= ~__DARWIN_ARM_THREAD_STATE64_FLAGS_KERNEL_SIGNED_LR;
+    // new_state->__flags &= ~__DARWIN_ARM_THREAD_STATE64_FLAGS_IB_SIGNED_LR;
+    // new_state->__flags |= __DARWIN_ARM_THREAD_STATE64_FLAGS_NO_PTRAUTH;
+    // new_state->__cpsr = 0x6000000;
+    // __darwin_arm_thread_state64_set_pc_fptr(*new_state, 0x41414141);
+
+    DumpRegisters(old_state);
+    // new_state->__flags = 0x60000000;
+    new_state->__lr = 0xFFFFFF00;
+    new_state->__flags = 0;
     
+    // __darwin_arm_thread_state64_set_pc_fptr(*new_state, 0x41414141 & 0xFFFFFFFFF);
+     __darwin_arm_thread_state64_set_pc_fptr(*new_state, 0x1048e8ed0 & 0xFFFFFFFFF);
+    
+    return KERN_SUCCESS;
+
+    return KERN_SUCCESS;
     if (num_exceptions_handled == 0) {
         DumpRegisters(old_state);
         printf("got task port: %d\n", task);
+    //     new_state->__cpsr = 0x80000000;
+    // new_state->__lr = 0xFFFFFF00;
+    // new_state->__flags &= ~__DARWIN_ARM_THREAD_STATE64_FLAGS_KERNEL_SIGNED_LR;
+    //     new_state->__flags &= ~__DARWIN_ARM_THREAD_STATE64_FLAGS_IB_SIGNED_LR;
+    //     new_state->__flags &= ~__DARWIN_ARM_THREAD_STATE64_FLAGS_NO_PTRAUTH;
+    // __darwin_arm_thread_state64_set_pc_fptr(*new_state, 0x4141414141414141);
+    // return KERN_SUCCESS;
+        // return KERN_SUCCESS;
+
+        thread_act_port_array_t thread_list;
+		mach_msg_type_number_t thread_count;
+		arm_debug_state64_t state;
+    		mach_msg_type_number_t state_count;
+        printf("task_threads_ret 0x%x\n", task_threads(task, &thread_list, &thread_count));
+
+        // __darwin_arm_thread_state64_set_pc_fptr(*new_state, 0x41414141);
+        // return KERN_FAILURE;
         GlobalChildTaskPort = task;
         GlobalChildThreadPort = thread;
         signed_pointer = NSUserDefaults.standardUserDefaults.signedPointer;
@@ -93,8 +128,11 @@ kern_return_t catch_mach_exception_raise_state_identity (mach_port_t exception_p
             pacBruteForcedPtr = signed_pointer;
         }
         new_state->__lr = 0xFFFFFF00;
+        NSLog(@"[w4ever] new_state->__flags before clearing: 0x%08x\n", new_state->__flags);
         new_state->__flags &= ~__DARWIN_ARM_THREAD_STATE64_FLAGS_KERNEL_SIGNED_LR;
         new_state->__flags &= ~__DARWIN_ARM_THREAD_STATE64_FLAGS_IB_SIGNED_LR;
+        // __darwin_arm_thread_state64_set_pc_fptr(*new_state, 0x41414141);
+        // return KERN_SUCCESS;
     }
     
     new_state->__flags &= ~__DARWIN_ARM_THREAD_STATE64_FLAGS_KERNEL_SIGNED_PC; // clear some flags

